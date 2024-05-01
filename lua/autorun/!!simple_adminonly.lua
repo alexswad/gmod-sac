@@ -227,7 +227,7 @@ else
 	net.Receive("SAdminCon_Update", function(_, ply)
 		local k, v = net.ReadString(), net.ReadBool()
 		SAdminCon.Entities[k] = v
-		if not v and SAdminCon.hide_convar:GetBool() and not SAdminCon:IsAdmin(LocalPlayer()) then
+		if SAdminCon.hide_convar:GetBool() and not SAdminCon:IsAdmin(LocalPlayer()) then
 			timer.Create("UpdateSpawnmenu", 15, 1, function()
 				RunConsoleCommand("spawnmenu_reload")
 			end)
@@ -345,45 +345,179 @@ function SAdminCon:RemoveCommand(name)
 	CommandLookup[name] = nil
 end
 
-function SAdminCon:RunCommand(ply, cmd)
-	if isstring(cmd) then cmd = CommandLookup[cmd] end
-	if IsValid(ply) then
-		if cmd.cat == "tp" then
-			local tp = self.tp_convar:GetInt()
-			if tp == 0 and not SAdminCon:IsAdmin(ply) then
-				return
-			elseif tp == 1 and cmd.name ~= "goto" then
-				return
+if SERVER then
+	function SAdminCon:RunCommand(ply, cmd, argstr)
+		if isstring(cmd) then cmd = CommandLookup[cmd] end
+		if IsValid(ply) then
+			if cmd.cat == "tp" then
+				local tp = self.tp_convar:GetInt()
+				if tp == 0 and not SAdminCon:IsAdmin(ply) then
+					return false, "You must be an Admin to run this command!"
+				elseif tp == 1 and cmd.name ~= "goto" then
+					return false, "You must be an Admin to run this command!"
+				end
+			elseif cmd.cat == "admin" and not SAdminCon:IsAdmin(ply) then
+				return false, "You must be an Admin to run this command!"
+			elseif cmd.cat == "superadmin" and not SAdminCon:CanEdit(ply) then
+				return false, "You must be a Superadmin to run this command!"
 			end
-		elseif cmd.cat == "admin" and not SAdminCon:IsAdmin(ply) then
-			return
-		elseif cmd.cat == "superadmin" and not SAdminCon:CanEdit(ply) then
-			return
 		end
+
+		local earg = string.Explode(" ", argstr or "")
+		local args, skipto = {}
+		for k, v in ipairs(earg) do
+			if v:Trim() == "" or (skipto and k <= skipto) then continue end
+			if v:StartsWith("\"") then
+				local n, nstr = k + 1, v:sub(2)
+				while earg[n] do
+					nstr = nstr .. " " .. earg[n]
+					skipto = n
+					if nstr:EndsWith("\"") then break end
+					n = n + 1
+				end
+
+				args[#args + 1] = nstr:TrimRight("\"")
+				continue
+			end
+			if v:StartsWith("\'") then
+				local n, nstr = k + 1, v:sub(2)
+				while earg[n] do
+					nstr = nstr .. " " .. earg[n]
+					skipto = n
+					if nstr:EndsWith("\'") then break end
+					n = n + 1
+				end
+
+				args[#args + 1] = nstr:TrimRight("\'")
+				continue
+			end
+			args[#args + 1] = v
+		end
+
+		return cmd.func(ply, args, argstr or "")
+	end
+
+	hook.Add("PlayerSay", "SAC_ONCHAT", function(ply, str)
+		local strtab = string.Explode(" ", str)
+		local cmd, argstr = strtab[1]:TrimLeft(SAdminCon.Prefix), str:sub(#strtab[1] + 1)
+		print(cmd, argstr)
+		if strtab[1]:StartsWith(SAdminCon.Prefix) and CommandLookup[cmd] then
+			local res, err = SAdminCon:RunCommand(ply, cmd, argstr:Trim())
+			if res == false then
+				ply:ChatPrint("[SAC] Command failed: " .. err)
+			else
+				ply:ChatPrint("[SAC] " .. res)
+			end
+			return ""
+		end
+	end)
+end
+
+local function findplayer(str)
+	local targets = {}
+	str = str:lower()
+	for k, v in pairs(player.GetAll()) do
+		if string.find(v:Name():lower(), str, 1, true) then
+			targets[#targets + 1] = v
+		end
+	end
+	return targets
+end
+
+local function checktarget(targets)
+	if #targets < 1 then
+		return false, "No player found!"
+	elseif #targets > 1 then
+		local plys = ""
+		for k, v in pairs(targets) do
+			plys = plys .. v:Name() .. ", "
+		end
+		return false, "Multiple players found: " .. plys:TrimRight(", ")
+	end
+	return targets[1]
+end
+
+local function ActivateNoCollision(target, min)
+	local oldCollision = target:GetCollisionGroup() or COLLISION_GROUP_PLAYER
+	target:SetCollisionGroup(COLLISION_GROUP_PASSABLE_DOOR) -- Players can walk through target
+	if (min and (tonumber(min) > 0)) then
+		timer.Simple(min, function() --after 'min' seconds
+			timer.Create(target:SteamID64() .. "_checkBounds_cycle", 0.5, 0, function() -- check every half second
+				local penetrating = ( target:GetPhysicsObject() and target:GetPhysicsObject():IsPenetrating() ) or false --if we are penetrating an object
+				local tooNearPlayer = false --or inside a player's hitbox
+				for i, ply in ipairs( player.GetAll() ) do
+					if target:GetPos():DistToSqr(ply:GetPos()) <= (80 * 80) then
+						tooNearPlayer = true
+					end
+				end
+				if not (penetrating and tooNearPlayer) then --if both false then 
+					target:SetCollisionGroup(oldCollision) -- Stop no-colliding by returning the original collision group (or default player collision)
+					timer.Remove(target:SteamID64() .. "_checkBounds_cycle")
+				end
+			end)
+		end)
 	end
 end
 
-SAdminCon:AddCommand("goto", "tp", function(ply, args)
+local function targetString(str, ...)
+	local targets = {}
+	for k, v in ipairs({...}) do
+		targets[k] = v:Name()
+	end
+	return string.format(str, unpack(targets))
+end
 
+SAdminCon:AddCommand("goto", "tp", function(ply, args)
+	if not IsValid(ply) or not args[1] then return false, "Missing arguements" end
+	local target, err = checktarget(findplayer(args[1]))
+	if target == ply then return false, "You can't goto yourself!" end
+	if not target then return false, err end
+
+	ply:SetPos(target:GetPos())
+	ActivateNoCollision(ply, 1)
+	return targetString("%s teleported to %s", ply, target)
 end, "Teleports you to a player", "<player>")
 
 SAdminCon:AddCommand("bring", "tp", function(ply, args)
+	if not IsValid(ply) or not args[1] then return false, "Missing arguements" end
+	local target, err = checktarget(findplayer(args[1]))
+	if target == ply then return false, "You can't bring yourself!" end
+	if not target then return false, err end
 
+	target:SetPos(ply:GetPos())
+	ActivateNoCollision(target, 1)
+	return targetString("%s teleported %s to them", ply, target)
 end, "Brings a player to you", "<player>")
 
 SAdminCon:AddCommand("tp", "tp", function(ply, args)
+	if not args[1] or not args[2] then return false, "Missing arguements" end
+	local target1, err = checktarget(findplayer(args[1]))
+	local target2, err2 = checktarget(findplayer(args[2]))
+	if not target1 then return false, err end
+	if not target2 then return false, err2 end
 
+	target1:SetPos(target2:GetPos())
+	ActivateNoCollision(target1, 1)
+	return targetString("%s teleported %s to %s", ply, target1, target2)
 end, "Teleports a player to another player", "<player> <player>")
 
 
-SAdminCon:AddCommand("kick", "admin", function(ply, args)
+SAdminCon:AddCommand("kick", "admin", function(ply, args, argstr)
+	local target, err = checktarget(findplayer(args[1]))
+	if not target then return false, err end
+	if not ply:IsSuperAdmin() and target:IsSuperAdmin() then return false, "You can't kick someone higher than you!" end
+	if target:IsListenServerHost() then return false, "You can't kick the server host!" end
 
-end, "Kicks a player from the server", "<player>")
+	local reason = argstr:sub(#args[1] + 1):Trim()
+	reason = reason ~= "" and reason or "Reason not given"
+	target:Kick("You were kicked from the server for:\n" .. reason)
+
+	return targetString("%s kicked %s from the server for: ", ply, target) .. reason
+end, "Kicks a player from the server", "<player> [reason]")
 
 SAdminCon:AddCommand("kickban", "admin", function(ply, args)
 
 end, "Kicks and bans a player for the remainder of the game session. Will not be saved and can be removed with sac_clearbans", "<player>", "kb")
-
 
 SAdminCon:AddCommand("restrict", "superadmin", function(ply, args)
 
@@ -410,5 +544,9 @@ end, "Promotes a player to admin, and then to a superadmin. Saved in data/settin
 SAdminCon:AddCommand("demote", "superadmin", function(ply, args)
 
 end, "Demotes a player to admin, and then to a user. Saved in data/settings/users.txt", "<player>")
+
+SAdminCon:AddCommand("noclip", "admin", function(ply, args)
+
+end, "Enables noclip for a player", "[player (no player defaults to user)]")
 
 hook.Run("SAC_LOADED")
