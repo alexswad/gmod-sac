@@ -1,6 +1,5 @@
 SAdminCon = SAdminCon or {}
 SAdminCon.Entities = SAdminCon.Entities or {}
-SAdminCon.Prefix = "$"
 
 -- Override this if you want to 
 function SAdminCon:CanEdit(ply)
@@ -14,6 +13,12 @@ end
 
 SAdminCon.hide_convar = CreateConVar("sac_hide", "0", {FCVAR_REPLICATED, FCVAR_ARCHIVE}, "1=Hide admin only stuff")
 SAdminCon.tp_convar = CreateConVar("sac_tp_perms", "0", {FCVAR_REPLICATED, FCVAR_ARCHIVE}, "0=Admins Only  1=Anyone can use Goto  2=Anyone can use every TP command")
+SAdminCon.announce_convar = CreateConVar("sac_announce", "0", {FCVAR_REPLICATED, FCVAR_ARCHIVE}, "0=Commands are announced to everyone  1=Commands are announced to user")
+SAdminCon.prefix_convar = CreateConVar("sac_prefix", "$", {FCVAR_REPLICATED, FCVAR_ARCHIVE}, "Sets the prefix, can be multiple characters but shouldn't contain spaces")
+
+function SAdminCon.GetPrefix()
+	return SAdminCon.prefix_convar:GetString()
+end
 
 local types = {
 	["npc"] = "NPC",
@@ -241,16 +246,16 @@ else
 		SAdminCon.First = true
 	end)
 
-	hook.Add("AddToolMenuCategories", "SAC_Category", function()
-		spawnmenu.AddToolCategory("Utilities", "SAC", "#SAC" )
-	end)
+	-- hook.Add("AddToolMenuCategories", "SAC_Category", function()
+	-- 	spawnmenu.AddToolCategory("Utilities", "SAC", "#SAC" )
+	-- end)
 
-	hook.Add("PopulateToolMenu", "SAC_BuildMenu", function()
-		spawnmenu.AddToolMenuOption("Utilities", "SAC", "SAC_Menu", "#Simple Admin Control", "", "", function(panel)
-			panel:ClearControls()
-			panel:NumSlider( "Gravity", "sv_gravity", 0, 600 )
-		end)
-	end)
+	-- hook.Add("PopulateToolMenu", "SAC_BuildMenu", function()
+	-- 	spawnmenu.AddToolMenuOption("Utilities", "SAC", "SAC_Menu", "#Simple Admin Control", "", "", function(panel)
+	-- 		panel:ClearControls()
+	-- 		panel:NumSlider( "Gravity", "sv_gravity", 0, 600 )
+	-- 	end)
+	-- end)
 
 	local shield = Material("icon16/shield.png")
 	hook.Add("PostReloadToolsMenu", "SAC_LoadToolMenu", function()
@@ -399,14 +404,17 @@ if SERVER then
 
 	hook.Add("PlayerSay", "SAC_ONCHAT", function(ply, str)
 		local strtab = string.Explode(" ", str)
-		local cmd, argstr = strtab[1]:TrimLeft(SAdminCon.Prefix), str:sub(#strtab[1] + 1)
-		print(cmd, argstr)
-		if strtab[1]:StartsWith(SAdminCon.Prefix) and CommandLookup[cmd] then
+		local cmd, argstr = strtab[1]:TrimLeft(SAdminCon.GetPrefix()), str:sub(#strtab[1] + 1)
+		if strtab[1]:StartsWith(SAdminCon.GetPrefix()) and CommandLookup[cmd] then
 			local res, err = SAdminCon:RunCommand(ply, cmd, argstr:Trim())
 			if res == false then
 				ply:ChatPrint("[SAC] Command failed: " .. err)
-			else
-				ply:ChatPrint("[SAC] " .. res)
+			elseif res then
+				if SAdminCon.announce_convar:GetBool() then
+					MsgAll("[SAC] " .. res)
+				else
+					ply:ChatPrint("[SAC] " .. res)
+				end
 			end
 			return ""
 		end
@@ -415,6 +423,7 @@ end
 
 local function findplayer(str)
 	local targets = {}
+	if not str then return targets end
 	str = str:lower()
 	for k, v in pairs(player.GetAll()) do
 		if string.find(v:Name():lower(), str, 1, true) then
@@ -515,38 +524,125 @@ SAdminCon:AddCommand("kick", "admin", function(ply, args, argstr)
 	return targetString("%s kicked %s from the server for: ", ply, target) .. reason
 end, "Kicks a player from the server", "<player> [reason]")
 
-SAdminCon:AddCommand("kickban", "admin", function(ply, args)
 
-end, "Kicks and bans a player for the remainder of the game session. Will not be saved and can be removed with sac_clearbans", "<player>", "kb")
+SAdminCon.Bans = {}
+SAdminCon:AddCommand("kickban", "admin", function(ply, args, argstr)
+	local target, err = checktarget(findplayer(args[1]))
+	if not target then return false, err end
+	if not ply:IsSuperAdmin() and target:IsSuperAdmin() then return false, "You can't kick someone higher than you!" end
+	if target:IsListenServerHost() then return false, "You can't kick the server host!" end
+
+	local reason = argstr:sub(#args[1] + 1):Trim()
+	reason = reason ~= "" and reason or "Reason not given"
+	target:Kick("You were banned from the server for:\n" .. reason)
+	SAdminCon.Bans[target:SteamID64()] = reason
+
+	return targetString("%s kickbanned %s from the server for: ", ply, target) .. reason
+
+end, "Kicks and bans a player for the remainder of the game session. Will not be saved and can be removed with sac_cleartempbans", "<player> [reason]", "kb")
+
+concommand.Add("sac_cleartempbans", function(ply)
+	if IsValid(ply) and not ply:IsSuperAdmin() then
+		return ply:ChatPrint("You need to be a Superadmin to clear bans!")
+	end
+	print("[SAC] Bans Manually Cleared by " .. (IsValid(ply) and ply:Name() or "Console"))
+	SAdminCon.Bans = {}
+end)
+
+hook.Add("CheckPassword", "SAC_BanPlayer", function(id64, ip)
+	if SAdminCon.Bans[id64] then
+		return false, "You are temporarily banned from the server for:\n" .. SAdminCon.Bans[id64]
+	end
+end)
+
 
 SAdminCon:AddCommand("restrict", "superadmin", function(ply, args)
+	if not args[1] then return false, "Missing arguements" end
+	SAdminCon:SetStatus(args[1], true)
 
+	return targetString("%s restricted ", ply) .. args[1]
 end, "Restricts an entity or tool by class name", "<class name>", "res")
 
 SAdminCon:AddCommand("unrestrict", "superadmin", function(ply, args)
+	if not args[1] then return false, "Missing arguements" end
+	SAdminCon:SetStatus(args[1], false)
 
+	return targetString("%s unrestricted ", ply) .. args[1]
 end, "Unrestricts an entity or tool by class name", "<class name>", "unr")
 
 
 SAdminCon:AddCommand("restricttool", "superadmin", function(ply, args)
+	if not IsValid(ply) or not IsValid(ply:GetActiveWeapon()) or ply:GetActiveWeapon():GetClass() ~= "gmod_tool" then return false, "Not holding a toolgun!" end
+	local tool = ply:GetInfo("gmod_toolmode")
+	SAdminCon:SetStatus(tool, true)
 
+	return targetString("%s restricted ", ply) .. tool
 end, "Restricts the current tool you have out", "(must have toolgun out)", "rtool")
 
 SAdminCon:AddCommand("unrestricttool", "superadmin", function(ply, args)
+	if not IsValid(ply) or not IsValid(ply:GetActiveWeapon()) or ply:GetActiveWeapon():GetClass() ~= "gmod_tool" then return false, "Not holding a toolgun!" end
+	local tool = ply:GetInfo("gmod_toolmode")
+	SAdminCon:SetStatus(tool, false)
 
+	return targetString("%s unrestricted ", ply) .. tool
 end, "Unrestricts the current tool you have out", "(must have toolgun out)", "unrtool")
 
+function SAdminCon.SaveUser(steamid, name, group)
+
+end
 
 SAdminCon:AddCommand("promote", "superadmin", function(ply, args)
+	local target, err = checktarget(findplayer(args[1]))
+	if not target then return false, err end
 
-end, "Promotes a player to admin, and then to a superadmin. Saved in data/settings/users.txt", "<player>")
+	if not target:IsAdmin() then
+		target:SetUserGroup("admin")
+	elseif not target:IsSuperAdmin() then
+		target:SetUserGroup("superadmin")
+	end
+end, "Promotes a player to admin, and then to a superadmin. Resets on join.", "<player>")
 
 SAdminCon:AddCommand("demote", "superadmin", function(ply, args)
+	local target, err = checktarget(findplayer(args[1]))
+	if not target then return false, err end
 
-end, "Demotes a player to admin, and then to a user. Saved in data/settings/users.txt", "<player>")
+	if target:IsSuperAdmin() then
+		target:SetUserGroup("admin")
+	elseif target:IsAdmin() then
+		target:SetUserGroup("user")
+	end
+end, "Demotes a player to admin, and then to a user. Resets on join.", "<player>")
 
 SAdminCon:AddCommand("noclip", "admin", function(ply, args)
+	local target = checktarget(findplayer(args[1]))
+	if not target then target = ply end
 
+	if target:GetMoveType() == MOVETPE_NOCLIP then
+		target:SetMoveType(MOVETYPE_WALK)
+	else
+		target:SetMoveType(MOVETYPE_NOCLIP)
+	end
 end, "Enables noclip for a player", "[player (no player defaults to user)]")
+
+SAdminCon.PrintHelp = function()
+	local str = "---SAdminCon Commands---\n"
+	for k, v in SortedPairsByMemberValue(Commands, "cat") do
+		str = str .. SAdminCon.GetPrefix() .. v.name .. " " .. (v.input or "(empty)") .. " - " .. (v.desc or "No help text") .. " (" .. v.cat .. ")\n"
+		if v.short then
+			str = str .. "Alias: " .. SAdminCon.GetPrefix() .. v.short .. "\n"
+		end
+		str = str .. "\n"
+	end
+	print(str)
+end
+
+SAdminCon:AddCommand("help", "general", function(ply, args)
+	if IsValid(ply) then
+		ply:SendLua("SAdminCon.PrintHelp()")
+		ply:ChatPrint("Printed help text to console!")
+	else
+		SAdminCon.PrintHelp()
+	end
+end, "Prints the list of commands in the players console")
 
 hook.Run("SAC_LOADED")
