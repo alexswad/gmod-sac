@@ -118,6 +118,27 @@ function SAdminCon.ToolCheck(ply, _, str)
 	end
 end
 
+net.Receive( "properties", function( len, client )
+	if not IsValid(client) then return end
+
+	local name = net.ReadString()
+	if not name then return end
+
+	local prop = properties.List[name]
+	if not prop then return end
+	if not prop.Receive then return end
+
+	if SAdminCon.Entities[name] then
+		if not client.SAC_LastPrint or (client.SAC_LastPrint and client.SAC_LastPrint < CurTime()) then
+			client:ChatPrint("[SAC] The property \"" .. name .. "\" is restricted!")
+			client.SAC_LastPrint = CurTime() + 1
+		end
+		return
+	end
+
+	prop:Receive(len, client)
+end)
+
 hook.Add("PlayerGiveSWEP", "!!SAdminCon_Spawn", SAdminCon.SpawnCheck)
 hook.Add("PlayerSpawnSENT", "!!SAdminCon_Spawn", SAdminCon.SpawnCheck)
 hook.Add("PlayerSpawnSWEP", "!!SAdminCon_Spawn", SAdminCon.SpawnCheck)
