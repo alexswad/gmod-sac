@@ -128,7 +128,7 @@ net.Receive( "properties", function( len, client )
 	if not prop then return end
 	if not prop.Receive then return end
 
-	if SAdminCon.Entities[name] then
+	if not SAdminCon:IsAdmin(client) and SAdminCon.Entities[name] then
 		if not client.SAC_LastPrint or (client.SAC_LastPrint and client.SAC_LastPrint < CurTime()) then
 			client:ChatPrint("[SAC] The property \"" .. name .. "\" is restricted!")
 			client.SAC_LastPrint = CurTime() + 1
