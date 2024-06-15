@@ -201,8 +201,11 @@ hook.Add("SpawnMenuOpen", "SAdminCon_Request", function()
 	SAdminCon.First = true
 end)
 
+local ndone = {}
+
 local function modify_node(node)
-	if not IsValid(node) then return end
+	if node and ndone[node] then return end
+	if not IsValid(node) then ndone[node or false] = true return end
 	node.DoRightClick = function(self)
 		if not SAdminCon:CanEdit(LocalPlayer()) then return end
 		local pnl = self.PropPanel or self.ViewPanel
@@ -233,6 +236,8 @@ local function modify_node(node)
 
 		menu:Open()
 	end
+
+	ndone[node] = true
 
 	if node.GetChildNodes then
 		for k, v in pairs(node:GetChildNodes()) do
