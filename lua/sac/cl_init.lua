@@ -202,6 +202,7 @@ hook.Add("SpawnMenuOpen", "SAdminCon_Request", function()
 end)
 
 local function modify_node(node)
+	if not IsValid(node) then return end
 	node.DoRightClick = function(self)
 		if not SAdminCon:CanEdit(LocalPlayer()) then return end
 		local pnl = self.PropPanel or self.ViewPanel
@@ -232,11 +233,20 @@ local function modify_node(node)
 
 		menu:Open()
 	end
+
+	if node.GetChildNodes then
+		for k, v in pairs(node:GetChildNodes()) do
+			modify_node(node)
+		end
+	end
 end
 
 local function node_settings(content, tree, node)
+	if not IsValid(tree) then return end
 	timer.Simple(0.1, function()
-		for k, v in pairs(tree:Root():GetChildNodes()) do
+		local root = tree.Root and tree:Root() or tree.GetRoot and tree:GetRoot()
+		if not IsValid(root) then return end
+		for k, v in pairs(root:GetChildNodes()) do
 			modify_node(v)
 		end
 	end)
