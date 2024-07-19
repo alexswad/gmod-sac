@@ -36,7 +36,7 @@ function SAdminCon:Update(k, v)
 end
 
 function SAdminCon:BroadcastUpdate(ent, status)
-	net.Start("SAdminCon_Update")
+	net.Start("SAdminCon_Update", true)
 		net.WriteString(ent)
 		net.WriteBool(status)
 	net.Broadcast()
@@ -44,7 +44,7 @@ end
 
 function SAdminCon:BroadcastTable(tbl)
 	local e = tbl or self.Entities
-	net.Start("SAdminCon_Setting")
+	net.Start("SAdminCon_Setting", true)
 		net.WriteUInt(table.Count(e), 16)
 		for k, v in pairs(e) do
 			net.WriteString(k)
@@ -62,7 +62,7 @@ end
 
 function SAdminCon:SendToPlayer(ply, tbl)
 	local e = tbl or self.Entities
-	net.Start("SAdminCon_Setting")
+	net.Start("SAdminCon_Setting", true)
 		net.WriteUInt(table.Count(e), 16)
 		for k, v in pairs(e) do
 			net.WriteString(k)

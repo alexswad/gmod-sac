@@ -1,5 +1,6 @@
 local types = SAdminCon.types
 local done = {}
+local tools
 
 function SAdminCon:TranslateListName(str, type)
 	if done[str] ~= nil then return done[str] end
@@ -48,8 +49,40 @@ function SAdminCon:SendTable(e)
 	net.SendToServer()
 end
 
+local cats = {}
+function SAdminCon:GetCategory(name)
+	if cats[name] then return cats[name] end
+
+	if weapons.GetStored(name) then
+		cats[name] = "weapon"
+		return "weapon"
+	end
+
+	for cat, _ in pairs(types) do
+		local b = list.GetForEdit(cat)[name]
+		if b then
+			cats[name] = cat
+			return cat
+		end
+	end
+
+	if scripted_ents.GetStored(name) then
+		cats[name] = "entity"
+		return "entity"
+	end
+
+	if tools[name] then
+		cats[name] = "tool"
+		return "tool"
+	end
+
+	cats[name] = "other"
+	return "other"
+end
+
 local shield = Material("icon16/shield.png")
 function SAdminCon.UpdateContentIcon()
+	tools = weapons.GetStored("gmod_tool").Tool
 	local tab = vgui.GetControlTable("ContentIcon")
 
 	function tab:GetAdminOnly()
@@ -338,5 +371,55 @@ hook.Add("PostReloadToolsMenu", "SAC_LoadToolMenu", function()
 				end
 			end
 		end
+	end)
+end)
+
+
+-- Toolmenu Tab
+hook.Add("AddToolMenuCategories", "SAC_ToolSettings", function()
+	spawnmenu.AddToolCategory("Utilities", "SAC", "#SimpleAdminOnly")
+end )
+
+hook.Add("PopulateToolMenu", "SAC_ToolSettings", function()
+	spawnmenu.AddToolMenuOption("Utilities", "SAC", "SimpleAdminOnly", "#SAC Settings", "", "", function(panel)
+		-- Presets
+		local presets = vgui.Create( "Panel", panel )
+		presets.DropDown = vgui.Create( "DComboBox", presets )
+		presets.DropDown.OnSelect = function( dropdown, index, value, data ) presets:OnSelect( index, value, data ) end
+		presets.DropDown:SetText( "Presets" )
+		presets.DropDown:Dock( FILL )
+
+		presets.CopyButton = vgui.Create( "DImageButton", presets )
+		presets.CopyButton.DoClick = function() presets:OpenPresetEditor() end
+		presets.CopyButton:Dock( RIGHT )
+		presets.CopyButton:SetImage( "icon16/disk_multiple.png" )
+		presets.CopyButton:SetStretchToFit( false )
+		presets.CopyButton:SetSize( 20, 20 )
+		presets.CopyButton:DockMargin( 0, 0, 0, 0 )
+
+		presets.AddButton = vgui.Create( "DImageButton", presets )
+		presets.AddButton.DoClick = function(self)
+			if ( !IsValid( self ) ) then return end
+
+			self:QuickSavePreset()
+		end
+		presets.AddButton:Dock( RIGHT )
+		presets.AddButton:SetTooltip( "#preset.add" )
+		presets.AddButton:SetImage( "icon16/add.png" )
+		presets.AddButton:SetStretchToFit( false )
+		presets.AddButton:SetSize( 20, 20 )
+		presets.AddButton:DockMargin( 2, 0, 0, 0 )
+
+		presets.DelButton = vgui.Create( "DImageButton", presets )
+		presets.DelButton.DoClick = function() presets:OpenPresetEditor() end
+		presets.DelButton:Dock( RIGHT )
+		presets.DelButton:SetImage( "icon16/delete.png" )
+		presets.DelButton:SetStretchToFit( false )
+		presets.DelButton:SetSize( 20, 20 )
+		presets.DelButton:DockMargin( 0, 0, 0, 0 )
+
+		presets:SetTall( 20 )
+		panel:AddItem(presets)
+
 	end)
 end)
