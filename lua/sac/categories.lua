@@ -11,6 +11,7 @@ SAdminCon.Categories = {
 local tools
 
 local cache = {}
+SAdminCon.cache = cache
 function SAdminCon:GetCategory(name)
 	tools = tools or weapons.GetStored("gmod_tool") and weapons.GetStored("gmod_tool").Tool
 	if cache[name] then return cache[name] end
@@ -38,7 +39,7 @@ function SAdminCon:GetCategory(name)
 		return "tool"
 	end
 
-	if util.IsValidProp(name) or util.IsValidRagdoll(name) then
+	if util.IsValidProp(name) or util.IsValidRagdoll(name) or name:EndsWith(".mdl") then
 		cache[name] = "prop"
 		return "prop"
 	end

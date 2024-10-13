@@ -64,9 +64,9 @@ function SAdminCon.UpdateContentIcon()
 
 	function spawnmenu.CreateContentIcon(type, pnl, data)
 		local ic = spawnmenu.s_CreateContentIcon(type, pnl, data)
-		if not types[type] then return ic end
+		if not IsValid(ic) then return ic end
 
-		if IsValid(ic) then
+		if types[type] then
 			ic.s_OpenMenuExtra = ic.s_OpenMenuExtra or ic.OpenMenuExtra
 
 			ic.Think = function(p)
@@ -97,6 +97,127 @@ function SAdminCon.UpdateContentIcon()
 
 		return ic
 	end
+
+	SAdminCon.oldModel = SAdminCon.oldModel or spawnmenu.GetContentType("model")
+
+	local oldmodel = SAdminCon.oldModel
+	spawnmenu.AddContentType("model", function(container, obj)
+		local ic = oldmodel(container, obj)
+		function ic:OpenMenu()
+			-- Use the containter that we are dragged onto, not the one we were created on
+			if (self:GetParent() and self:GetParent().ContentContainer) then
+				container = self:GetParent().ContentContainer
+			end
+
+			local menu = DermaMenu()
+
+			menu:AddOption("#spawnmenu.menu.copy", function()
+				SetClipboardText(string.gsub(self:GetModelName(), "\\", "/"))
+			end):SetIcon("icon16/page_copy.png")
+
+			menu:AddOption("#spawnmenu.menu.spawn_with_toolgun", function()
+				RunConsoleCommand("gmod_tool", "creator")
+				RunConsoleCommand("creator_type", "4")
+				RunConsoleCommand("creator_name", self:GetModelName())
+			end):SetIcon("icon16/brick_add.png")
+
+			local submenu, submenu_opt = menu:AddSubMenu("#spawnmenu.menu.rerender", function()
+				if (IsValid(self)) then
+					self:RebuildSpawnIcon()
+				end
+			end)
+
+			submenu_opt:SetIcon("icon16/picture_save.png")
+
+			submenu:AddOption("#spawnmenu.menu.rerender_this", function()
+				if (IsValid(self)) then
+					self:RebuildSpawnIcon()
+				end
+			end):SetIcon("icon16/picture.png")
+
+			submenu:AddOption("#spawnmenu.menu.rerender_all", function()
+				if (IsValid(container)) then
+					container:RebuildAll()
+				end
+			end):SetIcon("icon16/pictures.png")
+
+			menu:AddOption("#spawnmenu.menu.edit_icon", function()
+				if (not IsValid(self)) then return end
+				local editor = vgui.Create("IconEditor")
+				editor:SetIcon(self)
+				editor:Refresh()
+				editor:MakePopup()
+				editor:Center()
+			end):SetIcon("icon16/pencil.png")
+
+			-- Do not allow removal/size changes from read only panels
+			if (IsValid(self:GetParent()) and self:GetParent().GetReadOnly and self:GetParent():GetReadOnly()) then
+				menu:Open()
+				self:OpenExtraMenu(menu)
+
+				return
+			end
+
+			self:InternalAddResizeMenu(menu, function(w, h)
+				if (not IsValid(self)) then return end
+				self:SetSize(w, h)
+				self:InvalidateLayout(true)
+				container:OnModified()
+				container:Layout()
+				self:SetModel(self:GetModelName(), obj.skin or 0, obj.body)
+			end)
+
+			menu:AddSpacer()
+
+			menu:AddOption("#spawnmenu.menu.delete", function()
+				if (not IsValid(self)) then return end
+				self:Remove()
+				hook.Run("SpawnlistContentChanged")
+			end):SetIcon("icon16/bin_closed.png")
+
+			self:OpenExtraMenu(menu)
+
+			menu:Open()
+		end
+
+		function ic:OpenExtraMenu(menu)
+			if not SAdminCon:CanEdit(LocalPlayer()) then return end
+			menu:AddSpacer()
+
+			if not self:GetAdminOnly() then
+				menu:AddOption("Restrict to Admins", function()
+					SAdminCon:SendUpdate(self:GetModelName(), true)
+				end):SetIcon("icon16/delete.png")
+			else
+				menu:AddOption("Unrestrict for Everyone", function()
+					SAdminCon:SendUpdate(self:GetModelName(), false)
+				end):SetIcon("icon16/add.png")
+			end
+		end
+
+		function ic:GetAdminOnly()
+			return SAdminCon:GetStatus(self:GetModelName())
+		end
+
+		ic.OPaint = ic.PaintOver
+		function ic:PaintOver(w, h)
+			self:OPaint(w, h)
+			if SAdminCon:GetStatus(self:GetModelName()) then
+				surface.SetMaterial(shield)
+				surface.SetDrawColor(Color(255, 255, 255))
+				surface.DrawTexturedRect(w - 14, 6, 11, 11)
+			end
+		end
+
+		ic.Think = function(p)
+			if p:GetAdminOnly() and SAdminCon.hide_convar:GetBool() and not p.OldSizeX then
+				p.OldSizeX, p.OldSizeY = p:GetSize()
+				p:SetSize(0, 0)
+				p:SetVisible(false)
+			end
+		end
+		return ic
+	end)
 
 	--/ properties
 	local List = properties.List
@@ -173,6 +294,7 @@ function SAdminCon.UpdateContentIcon()
 		return menu
 	end
 end
+SAdminCon.UpdateContentIcon()
 
 net.Receive("SAdminCon_Data", function(_, ply)
 	local e = SAdminCon.Entities
