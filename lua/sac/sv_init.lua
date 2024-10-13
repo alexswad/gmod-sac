@@ -1,14 +1,17 @@
 local types = SAdminCon.types
 util.AddNetworkString("SAdminCon_Setting")
 util.AddNetworkString("SAdminCon_Update")
+util.AddNetworkString("SAdminCon_Data")
+
+file.CreateDir("sac")
 
 function SAdminCon:Save()
 	local str = util.TableToJSON(self.Entities, true)
-	file.Write("spawnac.txt", str)
+	file.Write("sac/default.json", str)
 end
 
 function SAdminCon:Load()
-	local str = file.Read("spawnac.txt")
+	local str = file.Read("sac/default.json")
 	self.Entities = util.JSONToTable(str or "") or {}
 	self:UpdateAll()
 end
@@ -17,6 +20,10 @@ function SAdminCon:UpdateAll()
 	for k, v in pairs(self.Entities) do
 		self:Update(k, v)
 	end
+end
+
+function SAdminCon:GetStatus(class)
+	return tobool(self.Entities[class]) ~= self:CheckWL(class)
 end
 
 function SAdminCon:Update(k, v)
@@ -42,15 +49,74 @@ function SAdminCon:BroadcastUpdate(ent, status)
 	net.Broadcast()
 end
 
-function SAdminCon:BroadcastTable(tbl)
-	local e = tbl or self.Entities
-	net.Start("SAdminCon_Setting", true)
-		net.WriteUInt(table.Count(e), 16)
-		for k, v in pairs(e) do
+local pmax = 400
+
+local function partify(tbl)
+	if table.Count(tbl) < pmax then return tbl end
+	local parts = math.ceil(table.Count(tbl) / pmax)
+	local ntbl = {}
+	ntbl.parts = parts
+
+	local count = 0
+	for k, v in pairs(tbl) do
+		count = count + 1
+
+		local cpart = math.ceil(count / pmax)
+		ntbl[cpart] = ntbl[cpart] or {}
+		ntbl[cpart][k] = v
+	end
+	return ntbl
+end
+
+local function send_part(tbl, tparts, part, ply, clear)
+	net.Start("SAdminCon_Data", true)
+		net.WriteBool(clear)
+		net.WriteUInt(tparts, 6)
+		net.WriteUInt(part, 6)
+		net.WriteUInt(table.Count(tbl), 16)
+
+		for k, v in pairs(tbl) do
 			net.WriteString(k)
 			net.WriteBool(v)
 		end
-	net.Broadcast()
+
+	if IsValid(ply) then
+		net.Send(ply)
+		return true
+	elseif ply == nil then
+		net.Broadcast()
+		return true
+	end
+end
+
+SAdminCon.DataTimers = {}
+
+function SAdminCon:DestroyDTimers()
+	for k, v in pairs(self.DataTimers) do
+		timer.Remove(k)
+	end
+	self.DataTimers = {}
+end
+
+function SAdminCon:SendTable(tbl, ply, clear)
+	local name = "SAdminUpdate_" .. (IsValid(ply) and ply:SteamID() or "Broadcast")
+
+	if not IsValid(ply) and clear then
+		self:DestroyDTimers()
+	end
+
+	tbl = partify(tbl)
+	if not tbl.parts then
+		send_part(tbl, 1, 1, ply, clear)
+		return
+	end
+
+	local cpart = 0
+	timer.Create(name, 1, tbl.parts, function()
+		cpart = cpart + 1
+		send_part(tbl[cpart], tbl.parts, cpart, ply, clear)
+	end)
+	self.DataTimers[name] = true
 end
 
 function SAdminCon:SetStatus(ent, status)
@@ -60,38 +126,27 @@ function SAdminCon:SetStatus(ent, status)
 	self:Save()
 end
 
-function SAdminCon:SendToPlayer(ply, tbl)
-	local e = tbl or self.Entities
-	net.Start("SAdminCon_Setting", true)
-		net.WriteUInt(table.Count(e), 16)
-		for k, v in pairs(e) do
-			net.WriteString(k)
-			net.WriteBool(v)
-		end
-	net.Send(ply)
-end
-
 concommand.Add("_requestSAdminCon", function(ply)
 	if ply.SAdminCon and ply.SAdminCon > CurTime() then return end
 	ply.SAdminCon = CurTime() + 5
-	SAdminCon:SendToPlayer(ply)
+	SAdminCon:SendTable(SAdminCon.Entities, ply)
 end)
 
 net.Receive("SAdminCon_Update", function(_, ply)
 	if not SAdminCon:CanEdit(ply) then return end
 	local k, v = net.ReadString(), net.ReadBool()
-	SAdminCon:SetStatus(k, v)
+	SAdminCon:SetStatus(k, v ~= SAdminCon:CheckWL(k))
 end)
 
-net.Receive("SAdminCon_Setting", function(_, ply)
+net.Receive("SAdminCon_Data", function(_, ply)
 	if not SAdminCon:CanEdit(ply) then return end
 	local e = {}
 	local len = net.ReadUInt(16)
 	for i = 1, len do
 		local k, v = net.ReadString(), net.ReadBool()
-		e[k] = v
+		e[k] = v ~= SAdminCon:CheckWL(k)
 	end
-	SAdminCon:BroadcastTable(e)
+	SAdminCon:SendTable(e)
 
 	for k, v in pairs(e) do
 		SAdminCon.Entities[k] = v
@@ -99,7 +154,7 @@ net.Receive("SAdminCon_Setting", function(_, ply)
 end)
 
 function SAdminCon.SpawnCheck(ply, str)
-	if not SAdminCon:IsAdmin(ply) and SAdminCon.Entities[str] then
+	if not SAdminCon:IsAdmin(ply) and SAdminCon:GetStatus(str) then
 		if not ply.SAC_LastPrint or (ply.SAC_LastPrint and ply.SAC_LastPrint < CurTime()) then
 			ply:ChatPrint("[SAC] The ent \"" .. str .. "\" is restricted!")
 			ply.SAC_LastPrint = CurTime() + 1
@@ -109,7 +164,7 @@ function SAdminCon.SpawnCheck(ply, str)
 end
 
 function SAdminCon.ToolCheck(ply, _, str)
-	if not SAdminCon:IsAdmin(ply) and SAdminCon.Entities[str] then
+	if not SAdminCon:IsAdmin(ply) and SAdminCon:GetStatus(str) then
 		if not ply.SAC_LastPrint or (ply.SAC_LastPrint and ply.SAC_LastPrint < CurTime()) then
 			ply:ChatPrint("[SAC] The tool \"" .. str .. "\" is restricted!")
 			ply.SAC_LastPrint = CurTime() + 1
@@ -128,7 +183,7 @@ net.Receive( "properties", function( len, client )
 	if not prop then return end
 	if not prop.Receive then return end
 
-	if not SAdminCon:IsAdmin(client) and SAdminCon.Entities[name] then
+	if not SAdminCon:IsAdmin(client) and SAdminCon:GetStatus(name) then
 		if not client.SAC_LastPrint or (client.SAC_LastPrint and client.SAC_LastPrint < CurTime()) then
 			client:ChatPrint("[SAC] The property \"" .. name .. "\" is restricted!")
 			client.SAC_LastPrint = CurTime() + 1
@@ -158,4 +213,13 @@ function scripted_ents.GetMember(str, mem)
 	end
 
 	return scripted_ents.s_GetMember(str, mem)
+end
+
+--Backwards compat
+if file.Exists("spawnac.txt", "DATA") then
+	local data = file.Read("spawnac.txt")
+	file.Write("spawnac.bak.txt", data)
+	file.Delete("spawnac.txt")
+
+	file.Write("sac/default.json", data)
 end

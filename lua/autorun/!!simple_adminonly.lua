@@ -30,9 +30,11 @@ SAdminCon.types = {
 
 AddCSLuaFile("sac/cl_init.lua")
 AddCSLuaFile("sac/commands.lua")
+AddCSLuaFile("sac/categories.lua")
 
 if SERVER then include("sac/sv_init.lua") end
 if CLIENT then include("sac/cl_init.lua") end
 include("sac/commands.lua")
+include("sac/categories.lua")
 
 hook.Run("SAC_LOADED")

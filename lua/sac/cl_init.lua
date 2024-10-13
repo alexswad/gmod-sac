@@ -1,13 +1,13 @@
 local types = SAdminCon.types
 local done = {}
-local tools
+
 
 function SAdminCon:TranslateListName(str, type)
 	if done[str] ~= nil then return done[str] end
 	local l = list.Get(types[type])
 	local obj = l[str]
 
-	if not l[str] then
+	if not obj then
 		done[str] = str
 
 		return str
@@ -19,15 +19,18 @@ function SAdminCon:TranslateListName(str, type)
 	return class
 end
 
-function SAdminCon:GetStatusPanel(pnl)
+function SAdminCon:GetStatusPanel(pnl, def)
 	local sp, ty = pnl:GetSpawnName(), pnl:GetContentType()
 	if not sp or not ty or not types[ty] then return end
-
-	return self.Entities[self:TranslateListName(sp, ty)]
+	return self:GetStatus(self:TranslateListName(sp, ty), def)
 end
 
-function SAdminCon:GetStatus(class)
-	return self.Entities[class]
+function SAdminCon:GetStatus(class, def_admin)
+	if self.Entities[class] == nil then
+		return def_admin or self:CheckWL(class)
+	else
+		return self.Entities[class] ~= self:CheckWL(class)
+	end
 end
 
 function SAdminCon:SendUpdate(ent, status)
@@ -38,7 +41,7 @@ function SAdminCon:SendUpdate(ent, status)
 end
 
 function SAdminCon:SendTable(e)
-	net.Start("SAdminCon_Setting")
+	net.Start("SAdminCon_Data")
 	net.WriteUInt(table.Count(e), 16)
 
 	for k, v in pairs(e) do
@@ -49,46 +52,12 @@ function SAdminCon:SendTable(e)
 	net.SendToServer()
 end
 
-local cats = {}
-function SAdminCon:GetCategory(name)
-	if cats[name] then return cats[name] end
-
-	if weapons.GetStored(name) then
-		cats[name] = "weapon"
-		return "weapon"
-	end
-
-	for cat, _ in pairs(types) do
-		local b = list.GetForEdit(cat)[name]
-		if b then
-			cats[name] = cat
-			return cat
-		end
-	end
-
-	if scripted_ents.GetStored(name) then
-		cats[name] = "entity"
-		return "entity"
-	end
-
-	if tools[name] then
-		cats[name] = "tool"
-		return "tool"
-	end
-
-	cats[name] = "other"
-	return "other"
-end
-
 local shield = Material("icon16/shield.png")
 function SAdminCon.UpdateContentIcon()
-	tools = weapons.GetStored("gmod_tool").Tool
 	local tab = vgui.GetControlTable("ContentIcon")
 
 	function tab:GetAdminOnly()
-		local stat = SAdminCon:GetStatusPanel(self)
-
-		return stat == nil and self.m_bAdminOnly or stat
+		return SAdminCon:GetStatusPanel(self, self.m_bAdminOnly)
 	end
 
 	spawnmenu.s_CreateContentIcon = spawnmenu.s_CreateContentIcon or spawnmenu.CreateContentIcon
@@ -205,9 +174,18 @@ function SAdminCon.UpdateContentIcon()
 	end
 end
 
-net.Receive("SAdminCon_Setting", function(_, ply)
+net.Receive("SAdminCon_Data", function(_, ply)
 	local e = SAdminCon.Entities
+	local clear = net.ReadBool()
+	local parts = net.ReadUInt(6)
+	local cpart = net.ReadUInt(6)
 	local len = net.ReadUInt(16)
+
+	if clear and cpart == 1 then
+		e = {}
+	end
+
+	print("[SAC] Downloading Data Parts " .. cpart .. "/" .. parts)
 
 	for i = 1, len do
 		local k, v = net.ReadString(), net.ReadBool()
@@ -249,8 +227,9 @@ local function modify_node(node)
 			local tbl = {}
 
 			for k, v in pairs(pnl:ContentsToTable()) do
-				if v.admin then continue end
-				tbl[SAdminCon:TranslateListName(v.spawnname, v.type)] = true
+				local name = SAdminCon:TranslateListName(v.spawnname, v.type)
+				if SAdminCon:GetStatus(name) then continue end
+				tbl[name] = true
 			end
 
 			SAdminCon:SendTable(tbl)
@@ -260,8 +239,9 @@ local function modify_node(node)
 			local tbl = {}
 
 			for k, v in pairs(pnl:ContentsToTable()) do
-				if not v.admin then continue end
-				tbl[SAdminCon:TranslateListName(v.spawnname, v.type)] = false
+				local name = SAdminCon:TranslateListName(v.spawnname, v.type)
+				if not SAdminCon:GetStatus(name) then continue end
+				tbl[name] = false
 			end
 
 			SAdminCon:SendTable(tbl)
@@ -378,48 +358,57 @@ end)
 -- Toolmenu Tab
 hook.Add("AddToolMenuCategories", "SAC_ToolSettings", function()
 	spawnmenu.AddToolCategory("Utilities", "SAC", "#SimpleAdminOnly")
-end )
+end)
 
 hook.Add("PopulateToolMenu", "SAC_ToolSettings", function()
 	spawnmenu.AddToolMenuOption("Utilities", "SAC", "SimpleAdminOnly", "#SAC Settings", "", "", function(panel)
+		if not LocalPlayer():IsListenServerHost() then
+			panel:Help("This menu can only be used by the listen server host. If the server is dedicated, you can use the sac_* commands in the server console or RCON to change these\nType 'find sac_' to list all of the commands.")
+			return
+		end
 		-- Presets
-		local presets = vgui.Create( "Panel", panel )
-		presets.DropDown = vgui.Create( "DComboBox", presets )
-		presets.DropDown.OnSelect = function( dropdown, index, value, data ) presets:OnSelect( index, value, data ) end
-		presets.DropDown:SetText( "Presets" )
-		presets.DropDown:Dock( FILL )
+		local presets = vgui.Create("Panel", panel)
+		presets.DropDown = vgui.Create("DComboBox", presets)
+		presets.DropDown.OnSelect = function(dropdown, index, value, data) presets:OnSelect(index, value, data) end
+		presets.DropDown:SetText("Presets")
+		presets.DropDown:Dock(FILL)
 
-		presets.CopyButton = vgui.Create( "DImageButton", presets )
+		presets.CopyButton = vgui.Create("DImageButton", presets)
 		presets.CopyButton.DoClick = function() presets:OpenPresetEditor() end
-		presets.CopyButton:Dock( RIGHT )
-		presets.CopyButton:SetImage( "icon16/disk_multiple.png" )
-		presets.CopyButton:SetStretchToFit( false )
-		presets.CopyButton:SetSize( 20, 20 )
-		presets.CopyButton:DockMargin( 0, 0, 0, 0 )
+		presets.CopyButton:Dock(RIGHT)
+		presets.CopyButton:SetImage("icon16/disk_multiple.png")
+		presets.CopyButton:SetStretchToFit(false)
+		presets.CopyButton:SetSize(20, 20)
+		presets.CopyButton:DockMargin(0, 0, 0, 0)
 
-		presets.AddButton = vgui.Create( "DImageButton", presets )
+		presets.AddButton = vgui.Create("DImageButton", presets)
 		presets.AddButton.DoClick = function(self)
-			if ( !IsValid( self ) ) then return end
+			if not IsValid(self) then return end
 
 			self:QuickSavePreset()
 		end
-		presets.AddButton:Dock( RIGHT )
-		presets.AddButton:SetTooltip( "#preset.add" )
-		presets.AddButton:SetImage( "icon16/add.png" )
-		presets.AddButton:SetStretchToFit( false )
-		presets.AddButton:SetSize( 20, 20 )
-		presets.AddButton:DockMargin( 2, 0, 0, 0 )
+		presets.AddButton:Dock(RIGHT)
+		presets.AddButton:SetTooltip("#preset.add")
+		presets.AddButton:SetImage("icon16/add.png")
+		presets.AddButton:SetStretchToFit(false)
+		presets.AddButton:SetSize(20, 20)
+		presets.AddButton:DockMargin(2, 0, 0, 0)
 
-		presets.DelButton = vgui.Create( "DImageButton", presets )
+		presets.DelButton = vgui.Create("DImageButton", presets)
 		presets.DelButton.DoClick = function() presets:OpenPresetEditor() end
-		presets.DelButton:Dock( RIGHT )
-		presets.DelButton:SetImage( "icon16/delete.png" )
-		presets.DelButton:SetStretchToFit( false )
-		presets.DelButton:SetSize( 20, 20 )
-		presets.DelButton:DockMargin( 0, 0, 0, 0 )
+		presets.DelButton:Dock(RIGHT)
+		presets.DelButton:SetImage("icon16/delete.png")
+		presets.DelButton:SetStretchToFit(false)
+		presets.DelButton:SetSize(20, 20)
+		presets.DelButton:DockMargin(0, 0, 0, 0)
 
-		presets:SetTall( 20 )
+		presets:SetTall(20)
 		panel:AddItem(presets)
+
+
+		for k, v in pairs(file.Find("sac/*.txt", "DATA")) do
+			presets.DropDown:AddChoice(v:StripExtension():gsub("^%l", string.upper), v, v == "default.txt")
+		end
 
 	end)
 end)
