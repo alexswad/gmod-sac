@@ -199,9 +199,9 @@ function SAdminCon.UpdateContentIcon()
 			return SAdminCon:GetStatus(self:GetModelName())
 		end
 
-		ic.OPaint = ic.PaintOver
+		ic.OPaintOver = ic.OPaintOver or ic.PaintOver
 		function ic:PaintOver(w, h)
-			self:OPaint(w, h)
+			self:OPaintOver(w, h)
 			if SAdminCon:GetStatus(self:GetModelName()) then
 				surface.SetMaterial(shield)
 				surface.SetDrawColor(Color(255, 255, 255))
@@ -209,12 +209,14 @@ function SAdminCon.UpdateContentIcon()
 			end
 		end
 
-		ic.Think = function(p)
-			if p:GetAdminOnly() and SAdminCon.hide_convar:GetBool() and not p.OldSizeX then
-				p.OldSizeX, p.OldSizeY = p:GetSize()
-				p:SetSize(0, 0)
-				p:SetVisible(false)
+		ic.OThink = ic.OThink or ic.Think
+		function ic:Think()
+			if self:GetAdminOnly() and SAdminCon.hide_convar:GetBool() and not self.OldSizeX then
+				self.OldSizeX, self.OldSizeY = self:GetSize()
+				self:SetSize(0, 0)
+				self:SetVisible(false)
 			end
+			return self:OThink()
 		end
 		return ic
 	end)
@@ -278,7 +280,7 @@ function SAdminCon.UpdateContentIcon()
 				SAdminCon:SendUpdate(name, not SAdminCon:GetStatus(name))
 			end
 
-			option.OPaint = option.Paint
+			option.OPaint = option.OPaint or option.Paint
 			function option:Paint(w, h)
 				self:OPaint(w, h)
 				if SAdminCon:GetStatus(name) then
@@ -294,7 +296,6 @@ function SAdminCon.UpdateContentIcon()
 		return menu
 	end
 end
-SAdminCon.UpdateContentIcon()
 
 net.Receive("SAdminCon_Data", function(_, ply)
 	local e = SAdminCon.Entities
@@ -327,6 +328,7 @@ net.Receive("SAdminCon_Update", function(_, ply)
 end)
 
 hook.Add("PreGamemodeLoaded", "SAdminCon_UpdateIcon", SAdminCon.UpdateContentIcon)
+hook.Add("SpawnMenuCreated", "SAdminCon_UpdateIcon", SAdminCon.UpdateContentIcon)
 
 hook.Add("SpawnMenuOpen", "SAdminCon_Request", function()
 	if SAdminCon.First then return end

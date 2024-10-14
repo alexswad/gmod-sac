@@ -156,7 +156,17 @@ end)
 function SAdminCon.SpawnCheck(ply, str)
 	if not SAdminCon:IsAdmin(ply) and SAdminCon:GetStatus(str) then
 		if not ply.SAC_LastPrint or (ply.SAC_LastPrint and ply.SAC_LastPrint < CurTime()) then
-			ply:ChatPrint("[SAC] The ent \"" .. str .. "\" is restricted!")
+			ply:ChatPrint("[SAC] The entity \"" .. str .. "\" is restricted!")
+			ply.SAC_LastPrint = CurTime() + 1
+		end
+		return false
+	end
+end
+
+function SAdminCon.PropCheck(ply, str)
+	if not SAdminCon:IsAdmin(ply) and SAdminCon:GetStatus(str) then
+		if not ply.SAC_LastPrint or (ply.SAC_LastPrint and ply.SAC_LastPrint < CurTime()) then
+			ply:ChatPrint("[SAC] The model \"" .. str .. "\" is restricted!")
 			ply.SAC_LastPrint = CurTime() + 1
 		end
 		return false
@@ -199,6 +209,7 @@ hook.Add("PlayerSpawnSENT", "!!SAdminCon_Spawn", SAdminCon.SpawnCheck)
 hook.Add("PlayerSpawnSWEP", "!!SAdminCon_Spawn", SAdminCon.SpawnCheck)
 hook.Add("PlayerSpawnNPC", "!!SAdminCon_Spawn", SAdminCon.SpawnCheck)
 hook.Add("PlayerSpawnVehicle", "!!SAdminCon_Spawn", SAdminCon.SpawnCheck)
+hook.Add("PlayerSpawnProp", "!!SAdminCon_SpawnProp", SAdminCon.PropCheck)
 hook.Add("CanTool", "!!SAdminCon_Spawn", SAdminCon.ToolCheck)
 hook.Add("InitPostEntity", "!!SAdminCon_Load", function() SAdminCon:Load() end)
 
