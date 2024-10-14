@@ -6,6 +6,7 @@ SAdminCon.Categories = {
 	"vehicle",
 	"tool",
 	"prop",
+	"playermodel",
 }
 
 local tools
@@ -39,7 +40,12 @@ function SAdminCon:GetCategory(name)
 		return "tool"
 	end
 
-	if util.IsValidProp(name) or util.IsValidRagdoll(name) or name:EndsWith(".mdl") then
+	if player_manager.AllValidModels()[name] then
+		cache[name] = "playermodel"
+		return "playermodel"
+	end
+
+	if name:EndsWith(".mdl") then
 		cache[name] = "prop"
 		return "prop"
 	end

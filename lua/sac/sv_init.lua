@@ -212,6 +212,16 @@ hook.Add("PlayerSpawnVehicle", "!!SAdminCon_Spawn", SAdminCon.SpawnCheck)
 hook.Add("PlayerSpawnProp", "!!SAdminCon_SpawnProp", SAdminCon.PropCheck)
 hook.Add("CanTool", "!!SAdminCon_Spawn", SAdminCon.ToolCheck)
 hook.Add("InitPostEntity", "!!SAdminCon_Load", function() SAdminCon:Load() end)
+hook.Add("PlayerSetModel", "!!SAdminCon_CheckModel", function(ply)
+	timer.Simple(0.1, function()
+		if not IsValid(ply) then return end
+		local m = player_manager.TranslateToPlayerModelName(ply:GetModel())
+		if m and SAdminCon:GetStatus(m) and not SAdminCon:IsAdmin(ply) then
+			ply:ChatPrint("[SAC] The playermodel " .. m .. " is restricted!")
+			ply:SetModel("models/player/kleiner.mdl")
+		end
+	end)
+end)
 
 -- bad inheritance priortizes truthy values because gmod is silly
 scripted_ents.s_GetMember = scripted_ents.s_GetMember or scripted_ents.GetMember

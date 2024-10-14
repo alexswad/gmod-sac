@@ -54,11 +54,84 @@ end
 
 local shield = Material("icon16/shield.png")
 function SAdminCon.UpdateContentIcon()
-	local tab = vgui.GetControlTable("ContentIcon")
+	local ci = vgui.GetControlTable("ContentIcon")
+	local si = vgui.GetControlTable("SpawnIcon")
 
-	function tab:GetAdminOnly()
+	function ci:GetAdminOnly()
 		return SAdminCon:GetStatusPanel(self, self.m_bAdminOnly)
 	end
+
+	si.OPaintOver = si.OPaintOver or si.PaintOver
+	function si:PaintOver(w, h)
+		self:OPaintOver(w, h)
+		if self:GetAdminOnly() then
+			surface.SetMaterial(shield)
+			surface.SetDrawColor(Color(255, 255, 255))
+			surface.DrawTexturedRect(w - 14, 6, 11, 11)
+		end
+	end
+
+	si.OThink = si.OThink or si.Think
+	function si:Think()
+		if self:GetAdminOnly() and SAdminCon.hide_convar:GetBool() and not self.OldSizeX then
+			self.OldSizeX, self.OldSizeY = self:GetSize()
+			self:SetSize(0, 0)
+			self:SetVisible(false)
+		end
+		return self:OThink()
+	end
+
+	function si:GetAdminOnly()
+		return self.playermodel and SAdminCon:GetStatus(self.playermodel)
+	end
+
+	function si:DoRightClick()
+
+		local pCanvas = self:GetSelectionCanvas()
+		if ( IsValid( pCanvas ) and pCanvas:NumSelectedChildren() > 0 and self:IsSelected() ) then
+			return hook.Run( "SpawnlistOpenGenericMenu", pCanvas )
+		end
+
+		if self.playermodel and SAdminCon:CanEdit(LocalPlayer()) then
+			local menu = DermaMenu()
+
+			menu:AddOption("#spawnmenu.menu.copy", function()
+				SetClipboardText(string.gsub(self:GetModelName(), "\\", "/"))
+			end):SetIcon("icon16/page_copy.png")
+
+			menu:AddSpacer()
+
+			if not self:GetAdminOnly() then
+				menu:AddOption("Restrict to Admins", function()
+					SAdminCon:SendUpdate(self.playermodel, true)
+				end):SetIcon("icon16/delete.png")
+			else
+				menu:AddOption("Unrestrict for Everyone", function()
+					SAdminCon:SendUpdate(self.playermodel, false)
+				end):SetIcon("icon16/add.png")
+			end
+			menu:Open()
+			return
+		end
+
+		self:OpenMenu()
+	end
+
+	function si:OpenExtraMenu(menu)
+		if not SAdminCon:CanEdit(LocalPlayer()) then return end
+		menu:AddSpacer()
+
+		if not self:GetAdminOnly() then
+			menu:AddOption("Restrict to Admins", function()
+				SAdminCon:SendUpdate(self:GetModelName(), true)
+			end):SetIcon("icon16/delete.png")
+		else
+			menu:AddOption("Unrestrict for Everyone", function()
+				SAdminCon:SendUpdate(self:GetModelName(), false)
+			end):SetIcon("icon16/add.png")
+		end
+	end
+
 
 	spawnmenu.s_CreateContentIcon = spawnmenu.s_CreateContentIcon or spawnmenu.CreateContentIcon
 
