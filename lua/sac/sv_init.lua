@@ -4,6 +4,7 @@ util.AddNetworkString("SAdminCon_Update")
 util.AddNetworkString("SAdminCon_Data")
 
 file.CreateDir("sac")
+SAdminCon.preset_convar = CreateConVar("sac_preset", "default")
 
 function SAdminCon:Save()
 	local str = util.TableToJSON(self.Entities, true)
@@ -33,12 +34,21 @@ function SAdminCon:Update(k, v)
 		l.AdminOnly = v
 	end
 
+	local ret = false
 	for _, cat in pairs(types) do
 		local b = list.GetForEdit(cat)[k]
 		if b then
 			if b.s_AdminOnly == nil then b.s_AdminOnly = b.AdminOnly end
 			b.AdminOnly = v
+			if b.s_AdminOnly == b.AdminOnly then
+				SAdminCon.Entities[k] = nil
+			end
 		end
+	end
+	if ret then return end
+
+	if v == false then
+		SAdminCon.Entities[k] = nil
 	end
 end
 
@@ -129,7 +139,7 @@ end
 concommand.Add("_requestSAdminCon", function(ply)
 	if ply.SAdminCon and ply.SAdminCon > CurTime() then return end
 	ply.SAdminCon = CurTime() + 5
-	SAdminCon:SendTable(SAdminCon.Entities, ply)
+	SAdminCon:SendTable(SAdminCon.Entities, ply, true)
 end)
 
 net.Receive("SAdminCon_Update", function(_, ply)

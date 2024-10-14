@@ -378,7 +378,8 @@ net.Receive("SAdminCon_Data", function(_, ply)
 	local len = net.ReadUInt(16)
 
 	if clear and cpart == 1 then
-		e = {}
+		SAdminCon.Entities = {}
+		e = SAdminCon.Entities
 	end
 
 	print("[SAC] Downloading Data Parts " .. cpart .. "/" .. parts)
@@ -559,10 +560,6 @@ end)
 
 hook.Add("PopulateToolMenu", "SAC_ToolSettings", function()
 	spawnmenu.AddToolMenuOption("Utilities", "SAC", "SimpleAdminOnly", "#SAC Settings", "", "", function(panel)
-		if not LocalPlayer():IsListenServerHost() then
-			panel:Help("This menu can only be used by the listen server host. If the server is dedicated, you can use the sac_* commands in the server console or RCON to change these\nType 'find sac_' to list all of the commands.")
-			return
-		end
 		-- Presets
 		local presets = vgui.Create("Panel", panel)
 		presets.DropDown = vgui.Create("DComboBox", presets)
@@ -599,12 +596,46 @@ hook.Add("PopulateToolMenu", "SAC_ToolSettings", function()
 		presets.DelButton:SetSize(20, 20)
 		presets.DelButton:DockMargin(0, 0, 0, 0)
 
+		function presets:OnSelect(ind, val, data)
+
+		end
+
 		presets:SetTall(20)
 		panel:AddItem(presets)
 
 
-		for k, v in pairs(file.Find("sac/*.txt", "DATA")) do
-			presets.DropDown:AddChoice(v:StripExtension():gsub("^%l", string.upper), v, v == "default.txt")
+		for k, v in pairs(file.Find("sac/*.json", "DATA")) do
+			presets.DropDown:AddChoice(v:StripExtension():gsub("^%l", string.upper), v, v == "default.json")
+		end
+
+		local cat_table = table.Copy(SAdminCon.Categories)
+		local cats = {}
+		table.insert(cat_table, "other")
+
+		for k, v in pairs(cat_table) do
+			local name = SAdminCon.HumanCat[k]
+			panel:Help(name):SetFont("ScoreboardDefault")
+			if v ~= "other" then
+				panel:CheckBox("Whitelist for " .. name, "sac_wl_" .. v)
+			end
+
+			local items = vgui.Create("DListView")
+			items:AddColumn("Right click to remove")
+			items:AddColumn("Restricted"):ResizeColumn(10)
+			items:SetTall(20)
+			items:SetMultiSelect(false)
+			function items:OnRowRightClick(number, d)
+
+			end
+			cats[v] = items
+			panel:AddItem(items)
+		end
+
+		for k, v in pairs(SAdminCon.Entities) do
+			local cat = SAdminCon:GetCategory(k) or "other"
+			local ct = cats[cat]
+			ct:AddLine(k, tostring(v))
+			ct:SetTall(math.min(ct:GetTall() + 18, 130))
 		end
 
 	end)

@@ -9,6 +9,17 @@ SAdminCon.Categories = {
 	"playermodel",
 }
 
+SAdminCon.HumanCat = {
+	"Entities",
+	"Weapons",
+	"NPCs",
+	"Vehicles",
+	"Tools",
+	"Props",
+	"Playermodels",
+	"Other",
+}
+
 local tools
 
 local cache = {}
