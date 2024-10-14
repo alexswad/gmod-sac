@@ -28,34 +28,38 @@ function SAdminCon:GetStatus(class)
 end
 
 function SAdminCon:Update(k, v)
+
 	local l = scripted_ents.GetStored(k) or weapons.GetStored(k)
 	if l then
-		if l.s_AdminOnly == nil then l.s_AdminOnly = l.AdminOnly end
-		l.AdminOnly = v
+		if l.s_AdminOnly == nil then l.s_AdminOnly = (l.AdminOnly or false) end
+		l.AdminOnly = v ~= self:CheckWL(k)
 	end
 
 	local ret = false
-	for _, cat in pairs(types) do
+	for key, cat in pairs(types) do
 		local b = list.GetForEdit(cat)[k]
 		if b then
-			if b.s_AdminOnly == nil then b.s_AdminOnly = b.AdminOnly end
-			b.AdminOnly = v
-			if b.s_AdminOnly == b.AdminOnly then
+			if b.s_AdminOnly == nil then b.s_AdminOnly = (b.AdminOnly or false) end
+			b.AdminOnly = v ~= self:CheckWL(k)
+			if b.s_AdminOnly == v and not (b.s_AdminOnly and self:CheckWL(k)) then
 				SAdminCon.Entities[k] = nil
+				return false
 			end
+			ret = true
 		end
 	end
 	if ret then return end
 
 	if v == false then
 		SAdminCon.Entities[k] = nil
+		return false
 	end
 end
 
 function SAdminCon:BroadcastUpdate(ent, status)
 	net.Start("SAdminCon_Update", true)
 		net.WriteString(ent)
-		net.WriteBool(status)
+		net.WriteUInt(status, 3)
 	net.Broadcast()
 end
 
@@ -87,7 +91,7 @@ local function send_part(tbl, tparts, part, ply, clear)
 
 		for k, v in pairs(tbl) do
 			net.WriteString(k)
-			net.WriteBool(v)
+			net.WriteUInt(isnumber(v) and v or v and 1 or 0, 3)
 		end
 
 	if IsValid(ply) then
@@ -131,8 +135,11 @@ end
 
 function SAdminCon:SetStatus(ent, status)
 	self.Entities[ent] = status
-	self:Update(ent, status)
-	self:BroadcastUpdate(ent, status)
+	if self:Update(ent, status) == false then
+		self:BroadcastUpdate(ent, 2)
+	else
+		self:BroadcastUpdate(ent, status and 1 or 0)
+	end
 	self:Save()
 end
 
@@ -156,11 +163,17 @@ net.Receive("SAdminCon_Data", function(_, ply)
 		local k, v = net.ReadString(), net.ReadBool()
 		e[k] = v ~= SAdminCon:CheckWL(k)
 	end
-	SAdminCon:SendTable(e)
 
 	for k, v in pairs(e) do
-		SAdminCon.Entities[k] = v
+		if SAdminCon:Update(k, v) ~= false then
+			SAdminCon.Entities[k] = v
+		else
+			SAdminCon.Entities[k] = nil
+			e[k] = 2
+		end
 	end
+
+	SAdminCon:SendTable(e)
 end)
 
 function SAdminCon.SpawnCheck(ply, str)

@@ -371,7 +371,6 @@ function SAdminCon.UpdateContentIcon()
 end
 
 net.Receive("SAdminCon_Data", function(_, ply)
-	local e = SAdminCon.Entities
 	local clear = net.ReadBool()
 	local parts = net.ReadUInt(6)
 	local cpart = net.ReadUInt(6)
@@ -379,20 +378,28 @@ net.Receive("SAdminCon_Data", function(_, ply)
 
 	if clear and cpart == 1 then
 		SAdminCon.Entities = {}
-		e = SAdminCon.Entities
 	end
 
 	print("[SAC] Downloading Data Parts " .. cpart .. "/" .. parts)
 
 	for i = 1, len do
-		local k, v = net.ReadString(), net.ReadBool()
-		e[k] = v
+		local k, v = net.ReadString(), net.ReadUInt(3)
+		print(k, v)
+		if v ~= 2 then
+			SAdminCon.Entities[k] = v == 1 and true or false
+		else
+			SAdminCon.Entities[k] = nil
+		end
 	end
 end)
 
 net.Receive("SAdminCon_Update", function(_, ply)
-	local k, v = net.ReadString(), net.ReadBool()
-	SAdminCon.Entities[k] = v
+	local k, v = net.ReadString(), net.ReadUInt(3)
+	if v ~= 2 then
+		SAdminCon.Entities[k] = v == 1 and true or false
+	else
+		SAdminCon.Entities[k] = nil
+	end
 
 	if SAdminCon.hide_convar:GetBool() and not SAdminCon:IsAdmin(LocalPlayer()) then
 		timer.Create("UpdateSpawnmenu", 15, 1, function()
@@ -621,7 +628,7 @@ hook.Add("PopulateToolMenu", "SAC_ToolSettings", function()
 
 			local items = vgui.Create("DListView")
 			items:AddColumn("Right click to remove")
-			items:AddColumn("Restricted"):ResizeColumn(10)
+			items:AddColumn("Black/Whitelisted"):ResizeColumn(10)
 			items:SetTall(20)
 			items:SetMultiSelect(false)
 			function items:OnRowRightClick(number, d)

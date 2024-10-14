@@ -70,6 +70,10 @@ function SAdminCon:CheckWL(name)
 	return self.WL[cat] and self.WL[cat]:GetBool() or false
 end
 
+function SAdminCon:GetWL(cat)
+	return self.WL[cat] and self.WL[cat]:GetBool() or false
+end
+
 SAdminCon.WL = {}
 for k, v in pairs(SAdminCon.Categories) do
 	SAdminCon.WL[v] = CreateConVar("sac_wl_" .. v, "0", {FCVAR_REPLICATED, FCVAR_ARCHIVE})
