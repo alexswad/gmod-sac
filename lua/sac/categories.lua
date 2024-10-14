@@ -77,4 +77,10 @@ end
 SAdminCon.WL = {}
 for k, v in pairs(SAdminCon.Categories) do
 	SAdminCon.WL[v] = CreateConVar("sac_wl_" .. v, "0", {FCVAR_REPLICATED, FCVAR_ARCHIVE})
+
+	cvars.AddChangeCallback("sac_wl_" .. v, function(cv, old, new)
+		if old ~= new then
+			SAdminCon:UpdateAll()
+		end
+	end)
 end

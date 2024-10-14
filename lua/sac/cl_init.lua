@@ -384,7 +384,6 @@ net.Receive("SAdminCon_Data", function(_, ply)
 
 	for i = 1, len do
 		local k, v = net.ReadString(), net.ReadUInt(3)
-		print(k, v)
 		if v ~= 2 then
 			SAdminCon.Entities[k] = v == 1 and true or false
 		else
@@ -567,53 +566,54 @@ end)
 
 hook.Add("PopulateToolMenu", "SAC_ToolSettings", function()
 	spawnmenu.AddToolMenuOption("Utilities", "SAC", "SimpleAdminOnly", "#SAC Settings", "", "", function(panel)
+		panel:Help("This menu is WIP and not fully working yet :("):SetFont("ScoreboardDefault")
 		-- Presets
-		local presets = vgui.Create("Panel", panel)
-		presets.DropDown = vgui.Create("DComboBox", presets)
-		presets.DropDown.OnSelect = function(dropdown, index, value, data) presets:OnSelect(index, value, data) end
-		presets.DropDown:SetText("Presets")
-		presets.DropDown:Dock(FILL)
+		-- local presets = vgui.Create("Panel", panel)
+		-- presets.DropDown = vgui.Create("DComboBox", presets)
+		-- presets.DropDown.OnSelect = function(dropdown, index, value, data) presets:OnSelect(index, value, data) end
+		-- presets.DropDown:SetText("Presets")
+		-- presets.DropDown:Dock(FILL)
 
-		presets.CopyButton = vgui.Create("DImageButton", presets)
-		presets.CopyButton.DoClick = function() presets:OpenPresetEditor() end
-		presets.CopyButton:Dock(RIGHT)
-		presets.CopyButton:SetImage("icon16/disk_multiple.png")
-		presets.CopyButton:SetStretchToFit(false)
-		presets.CopyButton:SetSize(20, 20)
-		presets.CopyButton:DockMargin(0, 0, 0, 0)
+		-- presets.CopyButton = vgui.Create("DImageButton", presets)
+		-- presets.CopyButton.DoClick = function() presets:OpenPresetEditor() end
+		-- presets.CopyButton:Dock(RIGHT)
+		-- presets.CopyButton:SetImage("icon16/disk_multiple.png")
+		-- presets.CopyButton:SetStretchToFit(false)
+		-- presets.CopyButton:SetSize(20, 20)
+		-- presets.CopyButton:DockMargin(0, 0, 0, 0)
 
-		presets.AddButton = vgui.Create("DImageButton", presets)
-		presets.AddButton.DoClick = function(self)
-			if not IsValid(self) then return end
+		-- presets.AddButton = vgui.Create("DImageButton", presets)
+		-- presets.AddButton.DoClick = function(self)
+		-- 	if not IsValid(self) then return end
 
-			self:QuickSavePreset()
-		end
-		presets.AddButton:Dock(RIGHT)
-		presets.AddButton:SetTooltip("#preset.add")
-		presets.AddButton:SetImage("icon16/add.png")
-		presets.AddButton:SetStretchToFit(false)
-		presets.AddButton:SetSize(20, 20)
-		presets.AddButton:DockMargin(2, 0, 0, 0)
+		-- 	self:QuickSavePreset()
+		-- end
+		-- presets.AddButton:Dock(RIGHT)
+		-- presets.AddButton:SetTooltip("#preset.add")
+		-- presets.AddButton:SetImage("icon16/add.png")
+		-- presets.AddButton:SetStretchToFit(false)
+		-- presets.AddButton:SetSize(20, 20)
+		-- presets.AddButton:DockMargin(2, 0, 0, 0)
 
-		presets.DelButton = vgui.Create("DImageButton", presets)
-		presets.DelButton.DoClick = function() presets:OpenPresetEditor() end
-		presets.DelButton:Dock(RIGHT)
-		presets.DelButton:SetImage("icon16/delete.png")
-		presets.DelButton:SetStretchToFit(false)
-		presets.DelButton:SetSize(20, 20)
-		presets.DelButton:DockMargin(0, 0, 0, 0)
+		-- presets.DelButton = vgui.Create("DImageButton", presets)
+		-- presets.DelButton.DoClick = function() presets:OpenPresetEditor() end
+		-- presets.DelButton:Dock(RIGHT)
+		-- presets.DelButton:SetImage("icon16/delete.png")
+		-- presets.DelButton:SetStretchToFit(false)
+		-- presets.DelButton:SetSize(20, 20)
+		-- presets.DelButton:DockMargin(0, 0, 0, 0)
 
-		function presets:OnSelect(ind, val, data)
+		-- function presets:OnSelect(ind, val, data)
 
-		end
+		-- end
 
-		presets:SetTall(20)
-		panel:AddItem(presets)
+		-- presets:SetTall(20)
+		-- panel:AddItem(presets)
 
 
-		for k, v in pairs(file.Find("sac/*.json", "DATA")) do
-			presets.DropDown:AddChoice(v:StripExtension():gsub("^%l", string.upper), v, v == "default.json")
-		end
+		-- for k, v in pairs(file.Find("sac/*.json", "DATA")) do
+		-- 	presets.DropDown:AddChoice(v:StripExtension():gsub("^%l", string.upper), v, v == "default.json")
+		-- end
 
 		local cat_table = table.Copy(SAdminCon.Categories)
 		local cats = {}
