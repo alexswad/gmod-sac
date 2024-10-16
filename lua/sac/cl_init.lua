@@ -35,7 +35,7 @@ end
 function SAdminCon:SendUpdate(ent, status)
 	net.Start("SAdminCon_Update")
 	net.WriteString(ent)
-	net.WriteBool(status)
+	net.WriteUInt(isnumber(status) and status or status and 1 or 0, 2)
 	net.SendToServer()
 end
 
@@ -385,7 +385,7 @@ net.Receive("SAdminCon_Data", function(_, ply)
 	print("[SAC] Downloading Data Parts " .. cpart .. "/" .. parts)
 
 	for i = 1, len do
-		local k, v = net.ReadString(), net.ReadUInt(3)
+		local k, v = net.ReadString(), net.ReadUInt(2)
 		if v ~= 2 then
 			SAdminCon.Entities[k] = v == 1 and true or false
 		else
@@ -399,7 +399,7 @@ net.Receive("SAdminCon_Data", function(_, ply)
 end)
 
 net.Receive("SAdminCon_Update", function(_, ply)
-	local k, v = net.ReadString(), net.ReadUInt(3)
+	local k, v = net.ReadString(), net.ReadUInt(2)
 	if v ~= 2 then
 		SAdminCon.Entities[k] = v == 1 and true or false
 	else
@@ -647,7 +647,8 @@ hook.Add("PopulateToolMenu", "SAC_ToolSettings", function()
 				items:SetTall(20)
 				items:SetMultiSelect(false)
 				function items:OnRowRightClick(number, d)
-
+					SAdminCon:SendUpdate(d:GetValue(1), 2)
+					items:RemoveLine(number)
 				end
 				cats[v] = items
 				panel:AddItem(items)

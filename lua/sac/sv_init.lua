@@ -27,7 +27,30 @@ function SAdminCon:GetStatus(class)
 	return tobool(self.Entities[class]) ~= self:CheckWL(class)
 end
 
+function SAdminCon:SetDefault(k)
+	local l = scripted_ents.GetStored(k) or weapons.GetStored(k)
+	if l then
+		if l.s_AdminOnly == nil then l.s_AdminOnly = (l.AdminOnly or false) end
+		l.AdminOnly = l.s_AdminOnly
+	end
+
+	for key, cat in pairs(types) do
+		local b = list.GetForEdit(cat)[k]
+		if b then
+			if b.s_AdminOnly == nil then b.s_AdminOnly = (b.AdminOnly or false) end
+			b.AdminOnly = b.s_AdminOnly
+		end
+	end
+
+	SAdminCon.Entities[k] = nil
+end
+
 function SAdminCon:Update(k, v)
+	if v == 2 then
+		SAdminCon:SetDefault(k)
+		return false
+	end
+	v = tobool(v)
 
 	local l = scripted_ents.GetStored(k) or weapons.GetStored(k)
 	if l then
@@ -59,7 +82,7 @@ end
 function SAdminCon:BroadcastUpdate(ent, status)
 	net.Start("SAdminCon_Update", true)
 		net.WriteString(ent)
-		net.WriteUInt(status, 3)
+		net.WriteUInt(status, 2)
 	net.Broadcast()
 end
 
@@ -91,7 +114,7 @@ local function send_part(tbl, tparts, part, ply, clear)
 
 		for k, v in pairs(tbl) do
 			net.WriteString(k)
-			net.WriteUInt(isnumber(v) and v or v and 1 or 0, 3)
+			net.WriteUInt(isnumber(v) and v or v and 1 or 0, 2)
 		end
 
 	if IsValid(ply) then
@@ -134,11 +157,16 @@ function SAdminCon:SendTable(tbl, ply, clear)
 end
 
 function SAdminCon:SetStatus(ent, status)
-	self.Entities[ent] = status
-	if self:Update(ent, status) == false then
+	if status == 2 then
+		self.Entities[ent] = nil
+	else
+		self.Entities[ent] = status
+	end
+
+	if status ~= 2 and self:Update(ent, status) == false then
 		self:BroadcastUpdate(ent, 2)
 	else
-		self:BroadcastUpdate(ent, status and 1 or 0)
+		self:BroadcastUpdate(ent, isnumber(status) and status or status and 1 or 0)
 	end
 	self:Save()
 end
@@ -151,8 +179,12 @@ end)
 
 net.Receive("SAdminCon_Update", function(_, ply)
 	if not SAdminCon:CanEdit(ply) then return end
-	local k, v = net.ReadString(), net.ReadBool()
-	SAdminCon:SetStatus(k, v ~= SAdminCon:CheckWL(k))
+	local k, v = net.ReadString(), net.ReadUInt(2)
+	if v ~= 2 then
+		SAdminCon:SetStatus(k, v ~= SAdminCon:CheckWL(k))
+	else
+		SAdminCon:SetStatus(k, v)
+	end
 end)
 
 net.Receive("SAdminCon_Data", function(_, ply)
