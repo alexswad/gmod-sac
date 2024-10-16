@@ -25,8 +25,24 @@ local tools
 local cache = {}
 SAdminCon.cache = cache
 function SAdminCon:GetCategory(name)
+	if name == nil then return "other" end
 	tools = tools or weapons.GetStored("gmod_tool") and weapons.GetStored("gmod_tool").Tool
 	if cache[name] then return cache[name] end
+
+	if tools[name] then
+		cache[name] = "tool"
+		return "tool"
+	end
+
+	if player_manager.TranslateToPlayerModelName(name) ~= "kleiner" and player_manager.TranslatePlayerModel("kleiner") ~= name then
+		cache[name] = "playermodel"
+		return "playermodel"
+	end
+
+	if name:EndsWith(".mdl") then
+		cache[name] = "prop"
+		return "prop"
+	end
 
 	if weapons.GetStored(name) then
 		cache[name] = "weapon"
@@ -34,7 +50,7 @@ function SAdminCon:GetCategory(name)
 	end
 
 	for cat, type in pairs(types) do
-		local b = list.GetForEdit(type)[name]
+		local b = list.Get(type)[name]
 		if b then
 			cache[name] = cat
 			return cat
@@ -44,21 +60,6 @@ function SAdminCon:GetCategory(name)
 	if scripted_ents.GetStored(name) then
 		cache[name] = "entity"
 		return "entity"
-	end
-
-	if tools[name] then
-		cache[name] = "tool"
-		return "tool"
-	end
-
-	if player_manager.AllValidModels()[name] then
-		cache[name] = "playermodel"
-		return "playermodel"
-	end
-
-	if name:EndsWith(".mdl") then
-		cache[name] = "prop"
-		return "prop"
 	end
 
 	cache[name] = "other"

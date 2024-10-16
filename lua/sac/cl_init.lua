@@ -1,19 +1,18 @@
 local types = SAdminCon.types
 local done = {}
-
+local np
 
 function SAdminCon:TranslateListName(str, type)
 	if done[str] ~= nil then return done[str] end
 	local l = list.Get(types[type])
 	local obj = l[str]
 
-	if not obj then
+	if not obj or type == "vehicle" then
 		done[str] = str
-
 		return str
 	end
 
-	local class = obj.ClassName or obj.Class
+	local class = obj.spawnname or obj.ClassName or obj.Class or str
 	done[str] = class
 
 	return class
@@ -73,26 +72,27 @@ function SAdminCon.UpdateContentIcon()
 
 	si.OThink = si.OThink or si.Think
 	function si:Think()
-		if self:GetAdminOnly() and SAdminCon.hide_convar:GetBool() and not self.OldSizeX then
-			self.OldSizeX, self.OldSizeY = self:GetSize()
-			self:SetSize(0, 0)
-			self:SetVisible(false)
+		if self:GetAdminOnly() and SAdminCon.hide_convar:GetBool() and not self.OldSizeX and not SAdminCon:IsAdmin(LocalPlayer()) then
+			self:Remove()
+			-- self.OldSizeX, self.OldSizeY = self:GetSize()
+			-- self:SetSize(0, 0)
+			-- self:SetVisible(false)
 		end
 		return self:OThink()
 	end
 
 	function si:GetAdminOnly()
-		return self.playermodel and SAdminCon:GetStatus(self.playermodel)
+		return SAdminCon:GetStatus(self:GetModelName())
 	end
 
 	function si:DoRightClick()
-
 		local pCanvas = self:GetSelectionCanvas()
 		if ( IsValid( pCanvas ) and pCanvas:NumSelectedChildren() > 0 and self:IsSelected() ) then
-			return hook.Run( "SpawnlistOpenGenericMenu", pCanvas )
+			local ret = hook.Run( "SpawnlistOpenGenericMenu", pCanvas )
+			if ret then return ret end
 		end
 
-		if self.playermodel and SAdminCon:CanEdit(LocalPlayer()) then
+		if SAdminCon:CanEdit(LocalPlayer()) then
 			local menu = DermaMenu()
 
 			menu:AddOption("#spawnmenu.menu.copy", function()
@@ -103,11 +103,11 @@ function SAdminCon.UpdateContentIcon()
 
 			if not self:GetAdminOnly() then
 				menu:AddOption("Restrict to Admins", function()
-					SAdminCon:SendUpdate(self.playermodel, true)
+					SAdminCon:SendUpdate(self:GetModelName(), true)
 				end):SetIcon("icon16/delete.png")
 			else
 				menu:AddOption("Unrestrict for Everyone", function()
-					SAdminCon:SendUpdate(self.playermodel, false)
+					SAdminCon:SendUpdate(self:GetModelName(), false)
 				end):SetIcon("icon16/add.png")
 			end
 			menu:Open()
@@ -144,9 +144,10 @@ function SAdminCon.UpdateContentIcon()
 
 			ic.Think = function(p)
 				if p:GetAdminOnly() and SAdminCon.hide_convar:GetBool() and not p.OldSizeX and not SAdminCon:IsAdmin(LocalPlayer()) then
-					p.OldSizeX, p.OldSizeY = p:GetSize()
-					p:SetSize(0, 0)
-					p:SetVisible(false)
+					p:Remove()
+					-- p.OldSizeX, p.OldSizeY = p:GetSize()
+					-- p:SetSize(0, 0)
+					-- p:SetVisible(false)
 				end
 			end
 
@@ -284,10 +285,11 @@ function SAdminCon.UpdateContentIcon()
 
 		ic.OThink = ic.OThink or ic.Think
 		function ic:Think()
-			if self:GetAdminOnly() and SAdminCon.hide_convar:GetBool() and not self.OldSizeX then
-				self.OldSizeX, self.OldSizeY = self:GetSize()
-				self:SetSize(0, 0)
-				self:SetVisible(false)
+			if self:GetAdminOnly() and SAdminCon.hide_convar:GetBool() and not SAdminCon:IsAdmin(LocalPlayer()) and not self.OldSizeX then
+				self:Remove()
+				-- self.OldSizeX, self.OldSizeY = self:GetSize()
+				-- self:SetSize(0, 0)
+				-- self:SetVisible(false)
 			end
 			return self:OThink()
 		end
@@ -390,6 +392,10 @@ net.Receive("SAdminCon_Data", function(_, ply)
 			SAdminCon.Entities[k] = nil
 		end
 	end
+
+	if parts <= cpart then
+		SAdminCon:Repop()
+	end
 end)
 
 net.Receive("SAdminCon_Update", function(_, ply)
@@ -399,12 +405,7 @@ net.Receive("SAdminCon_Update", function(_, ply)
 	else
 		SAdminCon.Entities[k] = nil
 	end
-
-	if SAdminCon.hide_convar:GetBool() and not SAdminCon:IsAdmin(LocalPlayer()) then
-		timer.Create("UpdateSpawnmenu", 15, 1, function()
-			RunConsoleCommand("spawnmenu_reload")
-		end)
-	end
+	SAdminCon:Repop()
 end)
 
 hook.Add("PreGamemodeLoaded", "SAdminCon_UpdateIcon", SAdminCon.UpdateContentIcon)
@@ -558,6 +559,16 @@ hook.Add("PostReloadToolsMenu", "SAC_LoadToolMenu", function()
 	end)
 end)
 
+function SAdminCon:Repop()
+	local hide = SAdminCon.hide_convar:GetBool() and not SAdminCon:IsAdmin(LocalPlayer())
+	timer.Create("UpdateSpawnmenu", hide and 7 or 3, 1, function()
+		if hide then
+			RunConsoleCommand("spawnmenu_reload")
+		elseif IsValid(np) then
+			np:Populate()
+		end
+	end)
+end
 
 -- Toolmenu Tab
 hook.Add("AddToolMenuCategories", "SAC_ToolSettings", function()
@@ -565,85 +576,90 @@ hook.Add("AddToolMenuCategories", "SAC_ToolSettings", function()
 end)
 
 hook.Add("PopulateToolMenu", "SAC_ToolSettings", function()
-	spawnmenu.AddToolMenuOption("Utilities", "SAC", "SimpleAdminOnly", "#SAC Settings", "", "", function(panel)
-		panel:Help("This menu is WIP and not fully working yet :("):SetFont("ScoreboardDefault")
-		-- Presets
-		-- local presets = vgui.Create("Panel", panel)
-		-- presets.DropDown = vgui.Create("DComboBox", presets)
-		-- presets.DropDown.OnSelect = function(dropdown, index, value, data) presets:OnSelect(index, value, data) end
-		-- presets.DropDown:SetText("Presets")
-		-- presets.DropDown:Dock(FILL)
+	spawnmenu.AddToolMenuOption("Utilities", "SAC", "SimpleAdminOnly", "#SAC Settings", "", "", function(parent)
+		np = parent
+		parent.Populate = function(panel)
+			panel:Clear()
+			panel:Help("This menu is WIP and not fully working yet :("):SetFont("ScoreboardDefault")
 
-		-- presets.CopyButton = vgui.Create("DImageButton", presets)
-		-- presets.CopyButton.DoClick = function() presets:OpenPresetEditor() end
-		-- presets.CopyButton:Dock(RIGHT)
-		-- presets.CopyButton:SetImage("icon16/disk_multiple.png")
-		-- presets.CopyButton:SetStretchToFit(false)
-		-- presets.CopyButton:SetSize(20, 20)
-		-- presets.CopyButton:DockMargin(0, 0, 0, 0)
+			-- Presets
+			local presets = vgui.Create("Panel", panel)
+			presets.DropDown = vgui.Create("DComboBox", presets)
+			presets.DropDown.OnSelect = function(dropdown, index, value, data) presets:OnSelect(index, value, data) end
+			presets.DropDown:SetText("Presets")
+			presets.DropDown:Dock(FILL)
 
-		-- presets.AddButton = vgui.Create("DImageButton", presets)
-		-- presets.AddButton.DoClick = function(self)
-		-- 	if not IsValid(self) then return end
+			presets.CopyButton = vgui.Create("DImageButton", presets)
+			presets.CopyButton.DoClick = function() presets:OpenPresetEditor() end
+			presets.CopyButton:Dock(RIGHT)
+			presets.CopyButton:SetImage("icon16/disk_multiple.png")
+			presets.CopyButton:SetStretchToFit(false)
+			presets.CopyButton:SetSize(20, 20)
+			presets.CopyButton:DockMargin(0, 0, 0, 0)
 
-		-- 	self:QuickSavePreset()
-		-- end
-		-- presets.AddButton:Dock(RIGHT)
-		-- presets.AddButton:SetTooltip("#preset.add")
-		-- presets.AddButton:SetImage("icon16/add.png")
-		-- presets.AddButton:SetStretchToFit(false)
-		-- presets.AddButton:SetSize(20, 20)
-		-- presets.AddButton:DockMargin(2, 0, 0, 0)
+			presets.AddButton = vgui.Create("DImageButton", presets)
+			presets.AddButton.DoClick = function(self)
+				if not IsValid(self) then return end
 
-		-- presets.DelButton = vgui.Create("DImageButton", presets)
-		-- presets.DelButton.DoClick = function() presets:OpenPresetEditor() end
-		-- presets.DelButton:Dock(RIGHT)
-		-- presets.DelButton:SetImage("icon16/delete.png")
-		-- presets.DelButton:SetStretchToFit(false)
-		-- presets.DelButton:SetSize(20, 20)
-		-- presets.DelButton:DockMargin(0, 0, 0, 0)
+				self:QuickSavePreset()
+			end
+			presets.AddButton:Dock(RIGHT)
+			presets.AddButton:SetTooltip("#preset.add")
+			presets.AddButton:SetImage("icon16/add.png")
+			presets.AddButton:SetStretchToFit(false)
+			presets.AddButton:SetSize(20, 20)
+			presets.AddButton:DockMargin(2, 0, 0, 0)
 
-		-- function presets:OnSelect(ind, val, data)
+			presets.DelButton = vgui.Create("DImageButton", presets)
+			presets.DelButton.DoClick = function() presets:OpenPresetEditor() end
+			presets.DelButton:Dock(RIGHT)
+			presets.DelButton:SetImage("icon16/delete.png")
+			presets.DelButton:SetStretchToFit(false)
+			presets.DelButton:SetSize(20, 20)
+			presets.DelButton:DockMargin(0, 0, 0, 0)
 
-		-- end
+			function presets:OnSelect(ind, val, data)
 
-		-- presets:SetTall(20)
-		-- panel:AddItem(presets)
-
-
-		-- for k, v in pairs(file.Find("sac/*.json", "DATA")) do
-		-- 	presets.DropDown:AddChoice(v:StripExtension():gsub("^%l", string.upper), v, v == "default.json")
-		-- end
-
-		local cat_table = table.Copy(SAdminCon.Categories)
-		local cats = {}
-		table.insert(cat_table, "other")
-
-		for k, v in pairs(cat_table) do
-			local name = SAdminCon.HumanCat[k]
-			panel:Help(name):SetFont("ScoreboardDefault")
-			if v ~= "other" then
-				panel:CheckBox("Whitelist for " .. name, "sac_wl_" .. v)
 			end
 
-			local items = vgui.Create("DListView")
-			items:AddColumn("Right click to remove")
-			items:AddColumn("Black/Whitelisted"):ResizeColumn(10)
-			items:SetTall(20)
-			items:SetMultiSelect(false)
-			function items:OnRowRightClick(number, d)
+			presets:SetTall(20)
+			panel:AddItem(presets)
 
+
+			for k, v in pairs(file.Find("sac/*.json", "DATA")) do
+				presets.DropDown:AddChoice(v:StripExtension():gsub("^%l", string.upper), v, v == "default.json")
 			end
-			cats[v] = items
-			panel:AddItem(items)
-		end
 
-		for k, v in pairs(SAdminCon.Entities) do
-			local cat = SAdminCon:GetCategory(k) or "other"
-			local ct = cats[cat]
-			ct:AddLine(k, tostring(v))
-			ct:SetTall(math.min(ct:GetTall() + 18, 130))
-		end
+			local cat_table = table.Copy(SAdminCon.Categories)
+			local cats = {}
+			table.insert(cat_table, "other")
 
+			for k, v in pairs(cat_table) do
+				local name = SAdminCon.HumanCat[k]
+				panel:Help(name):SetFont("ScoreboardDefault")
+				if v ~= "other" then
+					panel:CheckBox("Whitelist for " .. name, "sac_wl_" .. v)
+				end
+
+				local items = vgui.Create("DListView")
+				items:AddColumn("Right click to remove")
+				items:AddColumn("Black/Whitelisted"):ResizeColumn(10)
+				items:SetTall(20)
+				items:SetMultiSelect(false)
+				function items:OnRowRightClick(number, d)
+
+				end
+				cats[v] = items
+				panel:AddItem(items)
+			end
+
+			for k, v in pairs(SAdminCon.Entities) do
+				local cat = SAdminCon:GetCategory(k) or "other"
+				local ct = cats[cat]
+				ct:AddLine(k, tostring(v))
+				ct:SetTall(math.min(ct:GetTall() + 18, 130))
+			end
+		end
+		parent:Populate()
 	end)
 end)
