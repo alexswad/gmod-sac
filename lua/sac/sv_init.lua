@@ -82,7 +82,7 @@ end
 function SAdminCon:BroadcastUpdate(ent, status)
 	net.Start("SAdminCon_Update", true)
 		net.WriteString(ent)
-		net.WriteUInt(status, 2)
+		net.WriteUInt(isnumber(status) and status or status and 1 or 0, 2)
 	net.Broadcast()
 end
 
@@ -160,13 +160,14 @@ function SAdminCon:SetStatus(ent, status)
 	if status == 2 then
 		self.Entities[ent] = nil
 	else
+		status = tobool(status)
 		self.Entities[ent] = status
 	end
 
-	if status ~= 2 and self:Update(ent, status) == false then
+	if self:Update(ent, status) == false then
 		self:BroadcastUpdate(ent, 2)
 	else
-		self:BroadcastUpdate(ent, isnumber(status) and status or status and 1 or 0)
+		self:BroadcastUpdate(ent, status)
 	end
 	self:Save()
 end
@@ -181,7 +182,7 @@ net.Receive("SAdminCon_Update", function(_, ply)
 	if not SAdminCon:CanEdit(ply) then return end
 	local k, v = net.ReadString(), net.ReadUInt(2)
 	if v ~= 2 then
-		SAdminCon:SetStatus(k, v ~= SAdminCon:CheckWL(k))
+		SAdminCon:SetStatus(k, tobool(v) ~= SAdminCon:CheckWL(k))
 	else
 		SAdminCon:SetStatus(k, v)
 	end
