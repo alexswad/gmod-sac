@@ -92,7 +92,7 @@ function SAdminCon.UpdateContentIcon()
 			if ret then return ret end
 		end
 
-		if SAdminCon:CanEdit(LocalPlayer()) then
+		if not self.SAC_MOD and SAdminCon:CanEdit(LocalPlayer()) then
 			local menu = DermaMenu()
 
 			menu:AddOption("#spawnmenu.menu.copy", function()
@@ -110,6 +110,14 @@ function SAdminCon.UpdateContentIcon()
 					SAdminCon:SendUpdate(self:GetModelName(), false)
 				end):SetIcon("icon16/add.png")
 			end
+
+			menu:AddOption("Open Original Menu...", function()
+				input.SetCursorPos(menu:LocalToScreen(0, 0))
+				timer.Simple(0.1, function()
+					self:OpenMenu()
+				end)
+			end)
+
 			menu:Open()
 			return
 		end
@@ -177,6 +185,7 @@ function SAdminCon.UpdateContentIcon()
 	local oldmodel = SAdminCon.oldModel
 	spawnmenu.AddContentType("model", function(container, obj)
 		local ic = oldmodel(container, obj)
+		ic.SAC_MOD = true
 		function ic:OpenMenu()
 			-- Use the containter that we are dragged onto, not the one we were created on
 			if (self:GetParent() and self:GetParent().ContentContainer) then
