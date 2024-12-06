@@ -533,7 +533,7 @@ hook.Add("PostReloadToolsMenu", "SAC_LoadToolMenu", function()
 				end
 
 				v.s_Paint = v.s_Paint or v.Paint
-				v.s_Think = v.s_Think or v.Think
+				v.s_Think = v.s_Think or v.Think or function() end
 
 				function v:Think()
 					if v.s_Think then
